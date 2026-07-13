@@ -18,6 +18,10 @@ const VIEW_TYPE_STORAGE_MAP = "vault-storage-map-view";
 const CACHE_VERSION = 1;
 const MAX_CACHED_NODES = 50_000;
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
 type NodeKind = "folder" | "file";
 type ViewTab = "summary" | "treemap" | "folders" | "files" | "types" | "recommendations";
 type LanguageMode = "auto" | "ru" | "en" | "zh-cn" | "fr" | "de" | "es" | "it" | "tr" | "hi" | "bn" | "ta" | "pt";
@@ -2203,7 +2207,7 @@ export default class VaultStorageMapPlugin extends Plugin {
       };
       this.loadedFromCache = true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.warn("Vault Storage Map cache load failed", error);
+      if (!hasErrorCode(error, "ENOENT")) console.warn("Vault Storage Map cache load failed", error);
     }
   }
 
