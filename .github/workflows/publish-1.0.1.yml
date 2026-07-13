@@ -1,0 +1,47 @@
+name: Publish Vault Storage Map 1.0.1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-1.0.1.yml"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Validate manifest version
+        run: test "$(node -p "require('./manifest.json').version")" = "1.0.1"
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+      - name: Create release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view 1.0.1 >/dev/null 2>&1; then
+            echo "Release 1.0.1 already exists"
+          else
+            gh release create 1.0.1 main.js manifest.json styles.css \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Vault Storage Map 1.0.1" \
+              --generate-notes
+          fi
