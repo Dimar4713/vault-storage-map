@@ -2071,7 +2071,6 @@ export default class VaultStorageMapPlugin extends Plugin {
 
   onunload(): void {
     this.scanController?.abort();
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE_STORAGE_MAP);
   }
 
   resolveLanguage(): ResolvedLanguage {
@@ -2111,7 +2110,7 @@ export default class VaultStorageMapPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_STORAGE_MAP)[0];
     const leaf = existing ?? this.app.workspace.getLeaf("tab");
     if (!existing) await leaf.setViewState({ type: VIEW_TYPE_STORAGE_MAP, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   async startScan(): Promise<ScanResult | null> {
@@ -2883,7 +2882,7 @@ class VaultStorageMapSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: this.plugin.t("settingsTitle") });
+    new Setting(containerEl).setName(this.plugin.t("settingsTitle")).setHeading();
     containerEl.createEl("p", { cls: "setting-item-description", text: this.plugin.t("developedBy") });
 
     new Setting(containerEl)
