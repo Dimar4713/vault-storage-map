@@ -8,6 +8,7 @@ import {
   TFile,
   WorkspaceLeaf,
   setIcon,
+  getLanguage,
 } from "obsidian";
 import type { Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -16,7 +17,6 @@ import * as path from "node:path";
 const VIEW_TYPE_STORAGE_MAP = "vault-storage-map-view";
 const CACHE_VERSION = 1;
 const MAX_CACHED_NODES = 50_000;
-const INTERNAL_EXCLUDED_PATHS = new Set([".obsidian/plugins/vault-storage-map/storage-cache-v1.json"]);
 const electronShell = (require("electron") as { shell: { showItemInFolder: (fullPath: string) => void } }).shell;
 
 type NodeKind = "folder" | "file";
@@ -1897,6 +1897,7 @@ class VaultScanner {
   constructor(
     private readonly rootPath: string,
     private readonly settings: VaultStorageMapSettings,
+    private readonly configDir: string,
     private readonly signal: AbortSignal,
     private readonly onProgress: (progress: ScanProgress) => void,
   ) {
@@ -1927,9 +1928,11 @@ class VaultScanner {
 
   private shouldSkip(name: string, relativePath: string): boolean {
     const normalized = relativePath.replace(/\\/g, "/");
-    if (INTERNAL_EXCLUDED_PATHS.has(normalized)) return true;
+    const normalizedConfigDir = this.configDir.replace(/\\/g, "/");
+    const internalCachePath = `${normalizedConfigDir}/plugins/vault-storage-map/storage-cache-v1.json`;
+    if (normalized === internalCachePath) return true;
     if (!this.settings.includeHidden && name.startsWith(".")) return true;
-    if (!this.settings.includeObsidianConfig && (normalized === ".obsidian" || normalized.startsWith(".obsidian/"))) return true;
+    if (!this.settings.includeObsidianConfig && (normalized === normalizedConfigDir || normalized.startsWith(`${normalizedConfigDir}/`))) return true;
     return this.excludeMatchers.some((matcher) => matcher.test(normalized));
   }
 
@@ -2057,9 +2060,9 @@ export default class VaultStorageMapPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_STORAGE_MAP, (leaf) => new StorageMapView(leaf, this));
     this.addRibbonIcon("hard-drive", this.t("pluginName"), () => void this.activateView());
-    this.addCommand({ id: "open-vault-storage-map", name: this.t("openStorageMap"), callback: () => void this.activateView() });
+    this.addCommand({ id: "open-storage-map", name: this.t("openStorageMap"), callback: () => void this.activateView() });
     this.addCommand({
-      id: "scan-vault-storage",
+      id: "scan-storage",
       name: this.t("scanVaultStorage"),
       callback: async () => {
         await this.activateView();
@@ -2075,7 +2078,7 @@ export default class VaultStorageMapPlugin extends Plugin {
 
   resolveLanguage(): ResolvedLanguage {
     if (this.settings.language !== "auto") return this.settings.language;
-    const candidate = (window.localStorage.getItem("language") || navigator.language || "en").toLowerCase();
+    const candidate = (getLanguage() || navigator.language || "en").toLowerCase();
     if (candidate.startsWith("ru")) return "ru";
     if (candidate.startsWith("zh")) return "zh-cn";
     if (candidate.startsWith("fr")) return "fr";
@@ -2126,7 +2129,7 @@ export default class VaultStorageMapPlugin extends Plugin {
     this.loadedFromCache = false;
     this.refreshViews();
 
-    const scanner = new VaultScanner(basePath, this.settings, this.scanController.signal, (progress) => {
+    const scanner = new VaultScanner(basePath, this.settings, this.app.vault.configDir, this.scanController.signal, (progress) => {
       this.scanProgress = progress;
       this.refreshViews();
     });
@@ -2181,7 +2184,7 @@ export default class VaultStorageMapPlugin extends Plugin {
   getCachePath(): string | null {
     const base = this.getVaultBasePath();
     if (!base) return null;
-    return path.join(base, this.manifest.dir ?? ".obsidian/plugins/vault-storage-map", "storage-cache-v1.json");
+    return path.join(base, this.app.vault.configDir, "plugins", this.manifest.id, "storage-cache-v1.json");
   }
 
   async loadCachedResult(): Promise<void> {
@@ -2365,7 +2368,7 @@ class StorageMapView extends ItemView {
         const caret = search.selectionStart ?? search.value.length;
         this.searchQuery = search.value.trim().toLocaleLowerCase();
         this.render();
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
           const next = this.containerEl.querySelector<HTMLInputElement>(".vsm-search-wrap input");
           if (!next) return;
           next.focus();
@@ -2434,7 +2437,7 @@ class StorageMapView extends ItemView {
   private renderSummary(container: HTMLElement, result: ScanResult): void {
     const files = flattenNodes(result.root, "file").sort((a, b) => b.size - a.size);
     const folders = flattenNodes(result.root, "folder").filter((node) => node.relativePath).sort((a, b) => b.size - a.size);
-    const obsidianFolder = folders.find((node) => node.relativePath === ".obsidian");
+    const obsidianFolder = folders.find((node) => node.relativePath === this.app.vault.configDir);
     const cards = container.createDiv({ cls: "vsm-cards" });
     addMetricCard(cards, this.plugin.t("totalSize"), formatBytes(result.root.size), "hard-drive", storageDelta(result.root.size, this.plugin.settings.previousSummary?.totalSize));
     addMetricCard(cards, this.plugin.t("files"), result.root.fileCount.toLocaleString(), "files");
@@ -2562,7 +2565,7 @@ class StorageMapView extends ItemView {
     const setHelpOpen = (open: boolean): void => {
       breadcrumbHelpWrap.toggleClass("is-open", open);
       breadcrumbHelp.setAttribute("aria-expanded", String(open));
-      if (open) requestAnimationFrame(positionHelpPopover);
+      if (open) window.requestAnimationFrame(positionHelpPopover);
     };
     breadcrumbHelp.addEventListener("mouseenter", () => setHelpOpen(true));
     breadcrumbHelp.addEventListener("mouseleave", () => {
@@ -2599,7 +2602,7 @@ class StorageMapView extends ItemView {
       return;
     }
 
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       if (!treemap.isConnected) return;
       const width = Math.max(320, treemap.clientWidth);
       const height = Math.max(440, treemap.clientHeight);
@@ -3179,7 +3182,7 @@ function buildRecommendations(result: ScanResult, plugin: VaultStorageMapPlugin)
   const folders = flattenNodes(result.root, "folder");
   const threshold = settings.largeFileThresholdMb * 1024 * 1024;
   const largeFiles = files.filter((file) => file.size >= threshold);
-  const obsidianFolder = folders.find((folder) => folder.relativePath === ".obsidian");
+  const obsidianFolder = folders.find((folder) => folder.relativePath === plugin.app.vault.configDir);
   const copilotIndexes = files.filter((file) => /(^|\/)copilot-index-.*\.json$/i.test(file.relativePath));
 
   if (largeFiles.length) {
