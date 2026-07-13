@@ -1,7 +1,7 @@
 {
   "id": "vault-storage-map",
   "name": "Vault Storage Map",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minAppVersion": "1.7.2",
   "description": "Visualize vault disk usage with an interactive treemap, multilingual interface, cached scans, comparisons, exports, and diagnostic recommendations.",
   "author": "AIMETON · Dimar4713",

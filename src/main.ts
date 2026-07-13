@@ -8,8 +8,8 @@ import {
   TFile,
   WorkspaceLeaf,
   setIcon,
-  getLanguage,
 } from "obsidian";
+import { shell as electronShell } from "electron";
 import type { Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -17,7 +17,6 @@ import * as path from "node:path";
 const VIEW_TYPE_STORAGE_MAP = "vault-storage-map-view";
 const CACHE_VERSION = 1;
 const MAX_CACHED_NODES = 50_000;
-const electronShell = (require("electron") as { shell: { showItemInFolder: (fullPath: string) => void } }).shell;
 
 type NodeKind = "folder" | "file";
 type ViewTab = "summary" | "treemap" | "folders" | "files" | "types" | "recommendations";
@@ -2078,7 +2077,7 @@ export default class VaultStorageMapPlugin extends Plugin {
 
   resolveLanguage(): ResolvedLanguage {
     if (this.settings.language !== "auto") return this.settings.language;
-    const candidate = (getLanguage() || navigator.language || "en").toLowerCase();
+    const candidate = (navigator.language || "en").toLowerCase();
     if (candidate.startsWith("ru")) return "ru";
     if (candidate.startsWith("zh")) return "zh-cn";
     if (candidate.startsWith("fr")) return "fr";
@@ -2286,9 +2285,10 @@ class StorageMapView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.registerDomEvent(document, "keydown", (event: KeyboardEvent) => {
+    const activeDocument = this.containerEl.ownerDocument;
+    this.registerDomEvent(activeDocument, "keydown", (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !this.plugin.scanPromise) return;
-      if (!this.containerEl.contains(document.activeElement)) return;
+      if (!this.containerEl.contains(activeDocument.activeElement)) return;
       event.preventDefault();
       this.plugin.cancelScan();
     });
