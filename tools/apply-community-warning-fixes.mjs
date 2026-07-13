@@ -12,7 +12,7 @@ let source = read("src/main.ts");
 source = required(
   source,
   '  setIcon,\n} from "obsidian";',
-  '  setIcon,\n  getLanguage,\n  activeDocument,\n} from "obsidian";',
+  '  setIcon,\n  getLanguage,\n} from "obsidian";',
   "Obsidian imports",
 );
 
@@ -61,7 +61,6 @@ source = source.replaceAll(
   'folders.find((folder) => folder.relativePath === ".obsidian")',
   'folders.find((folder) => folder.relativePath === plugin.app.vault.configDir)',
 );
-source = source.replaceAll("document.createElement", "activeDocument.createElement");
 source = source.replaceAll("requestAnimationFrame(", "window.requestAnimationFrame(");
 
 write("src/main.ts", source);
@@ -88,7 +87,7 @@ if (lock.packages?.[""]) {
 delete lock.packages?.["node_modules/builtin-modules"];
 write("package-lock.json", `${JSON.stringify(lock, null, 2)}\n`);
 
-write("RELEASE_NOTES_1.0.2.md", `# Vault Storage Map 1.0.2\n\nObsidian Community compatibility improvements:\n\n- Respect the vault's configured configuration directory through Vault.configDir.\n- Use Obsidian getLanguage() for automatic language detection.\n- Use command IDs without repeating the plugin ID.\n- Improve popout-window compatibility with activeDocument and window.requestAnimationFrame().\n- Remove the obsolete builtin-modules development dependency.\n`);
+write("RELEASE_NOTES_1.0.2.md", `# Vault Storage Map 1.0.2\n\nObsidian Community compatibility improvements:\n\n- Respect the vault's configured configuration directory through Vault.configDir.\n- Use Obsidian getLanguage() for automatic language detection.\n- Use command IDs without repeating the plugin ID.\n- Use window.requestAnimationFrame() for popout-window compatibility.\n- Remove the obsolete builtin-modules development dependency.\n`);
 
 fs.rmSync("tools/apply-community-warning-fixes.mjs", { force: true });
 fs.rmSync(".github/workflows/apply-community-warning-fixes.yml", { force: true });
