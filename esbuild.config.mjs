@@ -2,7 +2,7 @@ import esbuild from "esbuild";
 import process from "node:process";
 import { builtinModules } from "node:module";
 
-const banner = `/* Vault Storage Map v1.0.3 | MIT */`;
+const banner = `/* Vault Storage Map v1.0.4 | MIT */`;
 const prod = process.argv[2] === "production";
 const nodeBuiltins = [...new Set(builtinModules.flatMap((name) => [name, `node:${name}`]))];
 

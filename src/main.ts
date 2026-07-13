@@ -9,14 +9,20 @@ import {
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
-import { shell as electronShell } from "electron";
+import { shell as rawElectronShell } from "electron";
 import type { Dirent } from "node:fs";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import { mkdir, readFile, readdir, realpath, rm, stat as fsStat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 
 const VIEW_TYPE_STORAGE_MAP = "vault-storage-map-view";
 const CACHE_VERSION = 1;
 const MAX_CACHED_NODES = 50_000;
+
+interface ElectronShell {
+  showItemInFolder(fullPath: string): void;
+}
+
+const electronShell = rawElectronShell as unknown as ElectronShell;
 
 type NodeKind = "folder" | "file";
 type ViewTab = "summary" | "treemap" | "folders" | "files" | "types" | "recommendations";
@@ -168,7 +174,7 @@ const EN_TRANSLATIONS: Record<string, string> = {
   starting: "Starting…",
   totalSize: "Total size",
   scanTime: "Scan time",
-  obsidianSize: ".obsidian size",
+  obsidianSize: "Obsidian size",
   largestFolder: "Largest folder",
   largestFile: "Largest file",
   changeSinceLast: "Change since last scan",
@@ -234,7 +240,7 @@ const EN_TRANSLATIONS: Record<string, string> = {
   colorDesc: "Choose whether color represents file type, relative size, or folder depth.",
   includeHidden: "Include hidden files and folders",
   includeHiddenDesc: "Includes names beginning with a dot. Recommended for storage diagnostics.",
-  includeObsidian: "Include .obsidian",
+  includeObsidian: "Include Obsidian",
   includeObsidianDesc: "Scan plugin data, indexes, caches, and configuration files.",
   scanOnOpen: "Scan when the view opens",
   scanOnOpenDesc: "Disabled by default to avoid unnecessary disk activity.",
@@ -258,7 +264,7 @@ const EN_TRANSLATIONS: Record<string, string> = {
   helpTreemap: "Click to select. Double-click a folder to drill down or a file to open it. Right-click reveals it in Explorer.",
   largeFilesTitle: "{count} large file(s) detected",
   largeFilesDesc: "The largest is {path} at {size}. Review large media, exports, and generated indexes before syncing them.",
-  obsidianTitle: ".obsidian occupies {percent} of the vault",
+  obsidianTitle: "Obsidian occupies {percent} of the vault",
   obsidianDesc: "Plugin data and indexes use {size}. Open the folder ranking to identify the responsible plugin or cache.",
   copilotTitle: "Copilot index files use {size}",
   copilotDesc: "These are derived local indexes. Consider partitioning them and excluding them from third-party synchronization.",
@@ -314,7 +320,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Запуск…",
     totalSize: "Общий размер",
     scanTime: "Время анализа",
-    obsidianSize: "Размер .obsidian",
+    obsidianSize: "Размер Obsidian",
     largestFolder: "Самая тяжёлая папка",
     largestFile: "Самый тяжёлый файл",
     changeSinceLast: "Изменение с прошлого анализа",
@@ -380,7 +386,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Цвет может обозначать тип файла, относительный размер или глубину папки.",
     includeHidden: "Учитывать скрытые файлы и папки",
     includeHiddenDesc: "Включает имена, начинающиеся с точки. Рекомендуется для диагностики.",
-    includeObsidian: "Учитывать .obsidian",
+    includeObsidian: "Учитывать Obsidian",
     includeObsidianDesc: "Анализировать данные плагинов, индексы, кэши и конфигурацию.",
     scanOnOpen: "Сканировать при открытии панели",
     scanOnOpenDesc: "По умолчанию выключено, чтобы не создавать лишнюю нагрузку на диск.",
@@ -404,7 +410,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Клик — выбрать. Двойной клик по папке — перейти внутрь, по файлу — открыть. Правый клик показывает объект в Проводнике.",
     largeFilesTitle: "Обнаружено крупных файлов: {count}",
     largeFilesDesc: "Самый большой: {path}, размер {size}. Проверьте медиа, экспорты и генерируемые индексы перед синхронизацией.",
-    obsidianTitle: ".obsidian занимает {percent} хранилища",
+    obsidianTitle: "Obsidian занимает {percent} хранилища",
     obsidianDesc: "Данные плагинов и индексы занимают {size}. Откройте рейтинг папок, чтобы найти источник роста.",
     copilotTitle: "Индексы Copilot занимают {size}",
     copilotDesc: "Это производные локальные индексы. Можно разбить их на части и исключить из сторонней синхронизации.",
@@ -458,7 +464,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "正在启动…",
     totalSize: "总大小",
     scanTime: "扫描时间",
-    obsidianSize: ".obsidian 大小",
+    obsidianSize: "Obsidian 大小",
     largestFolder: "最大文件夹",
     largestFile: "最大文件",
     changeSinceLast: "与上次扫描相比",
@@ -524,7 +530,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "颜色可表示文件类型、相对大小或文件夹层级。",
     includeHidden: "包含隐藏文件和文件夹",
     includeHiddenDesc: "包含以点开头的名称，建议用于存储诊断。",
-    includeObsidian: "包含 .obsidian",
+    includeObsidian: "包含 Obsidian",
     includeObsidianDesc: "扫描插件数据、索引、缓存和配置文件。",
     scanOnOpen: "打开面板时扫描",
     scanOnOpenDesc: "默认关闭，以避免不必要的磁盘活动。",
@@ -548,7 +554,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "单击选择；双击文件夹进入，双击文件打开；右键在资源管理器中显示。",
     largeFilesTitle: "检测到 {count} 个大文件",
     largeFilesDesc: "最大的是 {path}，大小 {size}。同步前请检查大型媒体、导出文件和生成的索引。",
-    obsidianTitle: ".obsidian 占仓库的 {percent}",
+    obsidianTitle: "Obsidian 占仓库的 {percent}",
     obsidianDesc: "插件数据和索引占用 {size}。请查看文件夹排名以定位相关插件或缓存。",
     copilotTitle: "Copilot 索引占用 {size}",
     copilotDesc: "这些是可重新生成的本地索引。可考虑分区并从第三方同步中排除。",
@@ -602,7 +608,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Démarrage…",
     totalSize: "Taille totale",
     scanTime: "Durée de l’analyse",
-    obsidianSize: "Taille de .obsidian",
+    obsidianSize: "Taille de Obsidian",
     largestFolder: "Dossier le plus volumineux",
     largestFile: "Fichier le plus volumineux",
     changeSinceLast: "Évolution depuis la dernière analyse",
@@ -665,7 +671,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Choisissez si la couleur représente le type, la taille relative ou la profondeur du dossier.",
     includeHidden: "Inclure les fichiers et dossiers cachés",
     includeHiddenDesc: "Inclut les noms commençant par un point. Recommandé pour le diagnostic du stockage.",
-    includeObsidian: "Inclure .obsidian",
+    includeObsidian: "Inclure Obsidian",
     includeObsidianDesc: "Analyse les données des modules, index, caches et fichiers de configuration.",
     scanOnOpen: "Analyser à l’ouverture de la vue",
     scanOnOpenDesc: "Désactivé par défaut pour éviter une activité disque inutile.",
@@ -689,7 +695,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Cliquez pour sélectionner. Double-cliquez sur un dossier pour l’ouvrir ou sur un fichier pour l’ouvrir. Un clic droit l’affiche dans l’explorateur.",
     largeFilesTitle: "{count} fichier(s) volumineux détecté(s)",
     largeFilesDesc: "Le plus volumineux est {path} ({size}). Vérifiez les médias, exports et index générés avant synchronisation.",
-    obsidianTitle: ".obsidian occupe {percent} du coffre",
+    obsidianTitle: "Obsidian occupe {percent} du coffre",
     obsidianDesc: "Les données de modules et index utilisent {size}. Consultez le classement des dossiers pour identifier le module ou cache responsable.",
     copilotTitle: "Les index Copilot utilisent {size}",
     copilotDesc: "Ce sont des index locaux dérivés. Envisagez de les partitionner et de les exclure des synchronisations tierces.",
@@ -745,7 +751,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Start…",
     totalSize: "Gesamtgröße",
     scanTime: "Scandauer",
-    obsidianSize: "Größe von .obsidian",
+    obsidianSize: "Größe von Obsidian",
     largestFolder: "Größter Ordner",
     largestFile: "Größte Datei",
     changeSinceLast: "Änderung seit dem letzten Scan",
@@ -808,7 +814,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Wählen Sie, ob die Farbe Dateityp, relative Größe oder Ordnertiefe darstellt.",
     includeHidden: "Versteckte Dateien und Ordner einbeziehen",
     includeHiddenDesc: "Schließt Namen ein, die mit einem Punkt beginnen. Für Speicherdiagnosen empfohlen.",
-    includeObsidian: ".obsidian einbeziehen",
+    includeObsidian: "Obsidian einbeziehen",
     includeObsidianDesc: "Plugin-Daten, Indizes, Caches und Konfigurationsdateien scannen.",
     scanOnOpen: "Beim Öffnen der Ansicht scannen",
     scanOnOpenDesc: "Standardmäßig deaktiviert, um unnötige Festplattenaktivität zu vermeiden.",
@@ -832,7 +838,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Klicken zum Auswählen. Doppelklicken Sie auf einen Ordner zum Öffnen oder auf eine Datei zum Öffnen. Rechtsklick zeigt das Element im Explorer.",
     largeFilesTitle: "{count} große Datei(en) erkannt",
     largeFilesDesc: "Die größte ist {path} mit {size}. Prüfen Sie große Medien, Exporte und erzeugte Indizes vor der Synchronisierung.",
-    obsidianTitle: ".obsidian belegt {percent} des Vaults",
+    obsidianTitle: "Obsidian belegt {percent} des Vaults",
     obsidianDesc: "Plugin-Daten und Indizes verwenden {size}. Öffnen Sie die Ordner-Rangliste, um das verantwortliche Plugin oder den Cache zu finden.",
     copilotTitle: "Copilot-Indexdateien verwenden {size}",
     copilotDesc: "Dies sind abgeleitete lokale Indizes. Erwägen Sie eine Partitionierung und den Ausschluss von Drittanbieter-Synchronisierungen.",
@@ -888,7 +894,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Iniciando…",
     totalSize: "Tamaño total",
     scanTime: "Tiempo de análisis",
-    obsidianSize: "Tamaño de .obsidian",
+    obsidianSize: "Tamaño de Obsidian",
     largestFolder: "Carpeta más grande",
     largestFile: "Archivo más grande",
     changeSinceLast: "Cambio desde el último análisis",
@@ -951,7 +957,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Elija si el color representa el tipo de archivo, el tamaño relativo o la profundidad.",
     includeHidden: "Incluir archivos y carpetas ocultos",
     includeHiddenDesc: "Incluye nombres que comienzan por punto. Recomendado para diagnósticos.",
-    includeObsidian: "Incluir .obsidian",
+    includeObsidian: "Incluir Obsidian",
     includeObsidianDesc: "Analiza datos de complementos, índices, cachés y archivos de configuración.",
     scanOnOpen: "Analizar al abrir la vista",
     scanOnOpenDesc: "Desactivado de forma predeterminada para evitar actividad de disco innecesaria.",
@@ -975,7 +981,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Pulse para seleccionar. Haga doble clic en una carpeta para entrar o en un archivo para abrirlo. El clic derecho lo muestra en el explorador.",
     largeFilesTitle: "Se detectaron {count} archivo(s) grande(s)",
     largeFilesDesc: "El mayor es {path} con {size}. Revise medios, exportaciones e índices generados antes de sincronizarlos.",
-    obsidianTitle: ".obsidian ocupa {percent} de la bóveda",
+    obsidianTitle: "Obsidian ocupa {percent} de la bóveda",
     obsidianDesc: "Los datos e índices de complementos usan {size}. Abra la clasificación de carpetas para identificar el complemento o caché responsable.",
     copilotTitle: "Los índices de Copilot usan {size}",
     copilotDesc: "Son índices locales derivados. Considere dividirlos y excluirlos de sincronizaciones de terceros.",
@@ -1031,7 +1037,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Avvio…",
     totalSize: "Dimensione totale",
     scanTime: "Tempo di analisi",
-    obsidianSize: "Dimensione di .obsidian",
+    obsidianSize: "Dimensione di Obsidian",
     largestFolder: "Cartella più grande",
     largestFile: "File più grande",
     changeSinceLast: "Variazione dall’ultima analisi",
@@ -1094,7 +1100,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Scegli se il colore rappresenta tipo di file, dimensione relativa o profondità.",
     includeHidden: "Includi file e cartelle nascosti",
     includeHiddenDesc: "Include i nomi che iniziano con un punto. Consigliato per la diagnostica.",
-    includeObsidian: "Includi .obsidian",
+    includeObsidian: "Includi Obsidian",
     includeObsidianDesc: "Analizza dati dei plugin, indici, cache e file di configurazione.",
     scanOnOpen: "Analizza all’apertura della vista",
     scanOnOpenDesc: "Disattivato per impostazione predefinita per evitare attività disco non necessaria.",
@@ -1118,7 +1124,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Fai clic per selezionare. Doppio clic su una cartella per entrare o su un file per aprirlo. Il clic destro lo mostra nel file manager.",
     largeFilesTitle: "Rilevati {count} file di grandi dimensioni",
     largeFilesDesc: "Il più grande è {path} con {size}. Controlla media, esportazioni e indici generati prima della sincronizzazione.",
-    obsidianTitle: ".obsidian occupa il {percent} del vault",
+    obsidianTitle: "Obsidian occupa il {percent} del vault",
     obsidianDesc: "Dati e indici dei plugin usano {size}. Apri la classifica delle cartelle per trovare il plugin o la cache responsabile.",
     copilotTitle: "Gli indici Copilot usano {size}",
     copilotDesc: "Sono indici locali derivati. Valuta di partizionarli ed escluderli dalle sincronizzazioni di terze parti.",
@@ -1174,7 +1180,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Başlatılıyor…",
     totalSize: "Toplam boyut",
     scanTime: "Tarama süresi",
-    obsidianSize: ".obsidian boyutu",
+    obsidianSize: "Obsidian boyutu",
     largestFolder: "En büyük klasör",
     largestFile: "En büyük dosya",
     changeSinceLast: "Son taramadan bu yana değişim",
@@ -1237,7 +1243,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Rengin dosya türünü, göreli boyutu veya klasör derinliğini göstermesini seçin.",
     includeHidden: "Gizli dosya ve klasörleri dahil et",
     includeHiddenDesc: "Nokta ile başlayan adları içerir. Depolama tanılaması için önerilir.",
-    includeObsidian: ".obsidian klasörünü dahil et",
+    includeObsidian: "Obsidian klasörünü dahil et",
     includeObsidianDesc: "Eklenti verilerini, dizinleri, önbellekleri ve yapılandırma dosyalarını tarar.",
     scanOnOpen: "Görünüm açıldığında tara",
     scanOnOpenDesc: "Gereksiz disk etkinliğini önlemek için varsayılan olarak kapalıdır.",
@@ -1261,7 +1267,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Seçmek için tıklayın. İçeri girmek için klasöre, açmak için dosyaya çift tıklayın. Sağ tık dosya yöneticisinde gösterir.",
     largeFilesTitle: "{count} büyük dosya algılandı",
     largeFilesDesc: "En büyüğü {path}, {size}. Eşitlemeden önce büyük medya, dışa aktarımlar ve oluşturulan dizinleri inceleyin.",
-    obsidianTitle: ".obsidian kasanın {percent} kadarını kaplıyor",
+    obsidianTitle: "Obsidian kasanın {percent} kadarını kaplıyor",
     obsidianDesc: "Eklenti verileri ve dizinler {size} kullanıyor. Sorumlu eklenti veya önbelleği bulmak için klasör sıralamasını açın.",
     copilotTitle: "Copilot dizin dosyaları {size} kullanıyor",
     copilotDesc: "Bunlar türetilmiş yerel dizinlerdir. Bölümlere ayırmayı ve üçüncü taraf eşitlemeden hariç tutmayı düşünün.",
@@ -1317,7 +1323,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "शुरू हो रहा है…",
     totalSize: "कुल आकार",
     scanTime: "स्कैन समय",
-    obsidianSize: ".obsidian का आकार",
+    obsidianSize: "Obsidian का आकार",
     largestFolder: "सबसे बड़ा फ़ोल्डर",
     largestFile: "सबसे बड़ी फ़ाइल",
     changeSinceLast: "पिछले स्कैन से बदलाव",
@@ -1380,7 +1386,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "चुनें कि रंग फ़ाइल प्रकार, सापेक्ष आकार या फ़ोल्डर गहराई दर्शाए।",
     includeHidden: "छिपी फ़ाइलें और फ़ोल्डर शामिल करें",
     includeHiddenDesc: "डॉट से शुरू होने वाले नाम शामिल करता है। स्टोरेज निदान के लिए अनुशंसित।",
-    includeObsidian: ".obsidian शामिल करें",
+    includeObsidian: "Obsidian शामिल करें",
     includeObsidianDesc: "प्लगइन डेटा, इंडेक्स, कैश और कॉन्फ़िगरेशन फ़ाइलें स्कैन करें।",
     scanOnOpen: "दृश्य खुलने पर स्कैन करें",
     scanOnOpenDesc: "अनावश्यक डिस्क गतिविधि से बचने के लिए डिफ़ॉल्ट रूप से बंद।",
@@ -1404,7 +1410,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "चुनने के लिए क्लिक करें। अंदर जाने के लिए फ़ोल्डर पर या खोलने के लिए फ़ाइल पर डबल-क्लिक करें। दायाँ क्लिक एक्सप्लोरर में दिखाता है।",
     largeFilesTitle: "{count} बड़ी फ़ाइलें मिलीं",
     largeFilesDesc: "सबसे बड़ी {path} है, आकार {size}। सिंक से पहले बड़े मीडिया, निर्यात और बनाए गए इंडेक्स देखें।",
-    obsidianTitle: ".obsidian वॉल्ट का {percent} लेता है",
+    obsidianTitle: "Obsidian वॉल्ट का {percent} लेता है",
     obsidianDesc: "प्लगइन डेटा और इंडेक्स {size} उपयोग करते हैं। जिम्मेदार प्लगइन या कैश पहचानने के लिए फ़ोल्डर रैंकिंग खोलें।",
     copilotTitle: "Copilot इंडेक्स फ़ाइलें {size} उपयोग करती हैं",
     copilotDesc: "ये बने हुए स्थानीय इंडेक्स हैं। इन्हें विभाजित करने और तृतीय-पक्ष सिंक से बाहर रखने पर विचार करें।",
@@ -1460,7 +1466,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "শুরু হচ্ছে…",
     totalSize: "মোট আকার",
     scanTime: "স্ক্যানের সময়",
-    obsidianSize: ".obsidian-এর আকার",
+    obsidianSize: "Obsidian-এর আকার",
     largestFolder: "সবচেয়ে বড় ফোল্ডার",
     largestFile: "সবচেয়ে বড় ফাইল",
     changeSinceLast: "শেষ স্ক্যানের পর পরিবর্তন",
@@ -1523,7 +1529,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "রংটি ফাইলের ধরন, আপেক্ষিক আকার বা ফোল্ডারের গভীরতা দেখাবে কিনা বেছে নিন।",
     includeHidden: "লুকানো ফাইল ও ফোল্ডার অন্তর্ভুক্ত করুন",
     includeHiddenDesc: "ডট দিয়ে শুরু হওয়া নাম অন্তর্ভুক্ত করে। স্টোরেজ নির্ণয়ের জন্য সুপারিশকৃত।",
-    includeObsidian: ".obsidian অন্তর্ভুক্ত করুন",
+    includeObsidian: "Obsidian অন্তর্ভুক্ত করুন",
     includeObsidianDesc: "প্লাগইন ডেটা, ইনডেক্স, ক্যাশ এবং কনফিগারেশন ফাইল স্ক্যান করুন।",
     scanOnOpen: "ভিউ খোলার সময় স্ক্যান করুন",
     scanOnOpenDesc: "অপ্রয়োজনীয় ডিস্ক কার্যকলাপ এড়াতে ডিফল্টভাবে বন্ধ।",
@@ -1547,7 +1553,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "নির্বাচন করতে ক্লিক করুন। ভিতরে যেতে ফোল্ডারে বা খুলতে ফাইলে ডাবল-ক্লিক করুন। ডান ক্লিক এক্সপ্লোরারে দেখায়।",
     largeFilesTitle: "{count}টি বড় ফাইল পাওয়া গেছে",
     largeFilesDesc: "সবচেয়ে বড় {path}, আকার {size}। সিঙ্কের আগে বড় মিডিয়া, রপ্তানি ও তৈরি ইনডেক্স দেখুন।",
-    obsidianTitle: ".obsidian ভল্টের {percent} দখল করে",
+    obsidianTitle: "Obsidian ভল্টের {percent} দখল করে",
     obsidianDesc: "প্লাগইন ডেটা ও ইনডেক্স {size} ব্যবহার করে। দায়ী প্লাগইন বা ক্যাশ খুঁজতে ফোল্ডার র‌্যাঙ্কিং খুলুন।",
     copilotTitle: "Copilot ইনডেক্স ফাইল {size} ব্যবহার করে",
     copilotDesc: "এগুলো তৈরি করা স্থানীয় ইনডেক্স। ভাগ করা এবং তৃতীয়-পক্ষ সিঙ্ক থেকে বাদ দেওয়ার কথা ভাবুন।",
@@ -1603,7 +1609,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "தொடங்குகிறது…",
     totalSize: "மொத்த அளவு",
     scanTime: "ஸ்கேன் நேரம்",
-    obsidianSize: ".obsidian அளவு",
+    obsidianSize: "Obsidian அளவு",
     largestFolder: "மிகப்பெரிய கோப்புறை",
     largestFile: "மிகப்பெரிய கோப்பு",
     changeSinceLast: "கடைசி ஸ்கேனிலிருந்து மாற்றம்",
@@ -1666,7 +1672,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "நிறம் கோப்பு வகை, சார்பு அளவு அல்லது கோப்புறை ஆழத்தை குறிக்குமா என்பதைத் தேர்வு செய்க.",
     includeHidden: "மறைக்கப்பட்ட கோப்புகள் மற்றும் கோப்புறைகளை சேர்க்கவும்",
     includeHiddenDesc: "புள்ளியால் தொடங்கும் பெயர்களை சேர்க்கிறது. சேமிப்பக ஆய்வுக்கு பரிந்துரைக்கப்படுகிறது.",
-    includeObsidian: ".obsidian-ஐ சேர்க்கவும்",
+    includeObsidian: "Obsidian-ஐ சேர்க்கவும்",
     includeObsidianDesc: "செருகுநிரல் தரவு, குறியீடுகள், கேஷ் மற்றும் அமைப்பு கோப்புகளை ஸ்கேன் செய்க.",
     scanOnOpen: "காட்சி திறக்கும் போது ஸ்கேன் செய்",
     scanOnOpenDesc: "தேவையற்ற வட்டு செயல்பாட்டை தவிர்க்க இயல்பாக முடக்கப்பட்டுள்ளது.",
@@ -1690,7 +1696,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "தேர்வு செய்ய கிளிக் செய்க. உள்ளே செல்ல கோப்புறையையோ திறக்க கோப்பையையோ இருமுறை கிளிக் செய்க. வலது கிளிக் கோப்பு மேலாளரில் காட்டும்.",
     largeFilesTitle: "{count} பெரிய கோப்பு(கள்) கண்டறியப்பட்டன",
     largeFilesDesc: "மிகப்பெரியது {path}, அளவு {size}. ஒத்திசைவுக்கு முன் பெரிய ஊடகம், ஏற்றுமதி மற்றும் உருவாக்கப்பட்ட குறியீடுகளை பரிசீலிக்கவும்.",
-    obsidianTitle: ".obsidian வால்ட்டின் {percent} இடத்தைப் பயன்படுத்துகிறது",
+    obsidianTitle: "Obsidian வால்ட்டின் {percent} இடத்தைப் பயன்படுத்துகிறது",
     obsidianDesc: "செருகுநிரல் தரவும் குறியீடுகளும் {size} பயன்படுத்துகின்றன. பொறுப்பான செருகுநிரல் அல்லது கேஷை கண்டறிய கோப்புறை தரவரிசையைத் திறக்கவும்.",
     copilotTitle: "Copilot குறியீட்டு கோப்புகள் {size} பயன்படுத்துகின்றன",
     copilotDesc: "இவை உருவாக்கப்பட்ட உள்ளூர் குறியீடுகள். அவற்றைப் பிரித்து மூன்றாம் தரப்பு ஒத்திசைவில் இருந்து விலக்க நினைக்கவும்.",
@@ -1746,7 +1752,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     starting: "Iniciando…",
     totalSize: "Tamanho total",
     scanTime: "Tempo de análise",
-    obsidianSize: "Tamanho de .obsidian",
+    obsidianSize: "Tamanho de Obsidian",
     largestFolder: "Maior pasta",
     largestFile: "Maior arquivo",
     changeSinceLast: "Mudança desde a última análise",
@@ -1809,7 +1815,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     colorDesc: "Escolha se a cor representa tipo de arquivo, tamanho relativo ou profundidade.",
     includeHidden: "Incluir arquivos e pastas ocultos",
     includeHiddenDesc: "Inclui nomes que começam com ponto. Recomendado para diagnóstico.",
-    includeObsidian: "Incluir .obsidian",
+    includeObsidian: "Incluir Obsidian",
     includeObsidianDesc: "Analisa dados de plugins, índices, caches e arquivos de configuração.",
     scanOnOpen: "Analisar ao abrir a visualização",
     scanOnOpenDesc: "Desativado por padrão para evitar atividade desnecessária no disco.",
@@ -1833,7 +1839,7 @@ const I18N: Record<ResolvedLanguage, Record<string, string>> = {
     helpTreemap: "Clique para selecionar. Dê duplo clique em uma pasta para entrar ou em um arquivo para abrir. O botão direito mostra no explorador.",
     largeFilesTitle: "{count} arquivo(s) grande(s) detectado(s)",
     largeFilesDesc: "O maior é {path}, com {size}. Revise mídias, exportações e índices gerados antes de sincronizar.",
-    obsidianTitle: ".obsidian ocupa {percent} do cofre",
+    obsidianTitle: "Obsidian ocupa {percent} do cofre",
     obsidianDesc: "Dados e índices de plugins usam {size}. Abra a classificação de pastas para identificar o plugin ou cache responsável.",
     copilotTitle: "Arquivos de índice do Copilot usam {size}",
     copilotDesc: "São índices locais derivados. Considere particioná-los e excluí-los da sincronização de terceiros.",
@@ -1909,7 +1915,7 @@ class VaultScanner {
 
   async scan(): Promise<ScanResult> {
     const startedAt = performance.now();
-    const rootName = path.basename(this.rootPath) || this.rootPath;
+    const rootName = basename(this.rootPath) || this.rootPath;
     const root = await this.scanDirectory(this.rootPath, "", rootName);
     this.emitProgress(true);
     return {
@@ -1939,7 +1945,7 @@ class VaultScanner {
     this.checkCancelled();
     if (this.settings.followSymbolicLinks) {
       try {
-        const realPath = await this.semaphore.use(() => fs.realpath(absolutePath));
+        const realPath = await this.semaphore.use(() => realpath(absolutePath));
         if (this.visitedDirectories.has(realPath)) {
           this.errors.push({ relativePath: relativePath || ".", message: "Symbolic-link loop or duplicate target skipped" });
           return { name, relativePath, absolutePath, kind: "folder", size: 0, fileCount: 0, folderCount: 0, children: [] };
@@ -1956,7 +1962,7 @@ class VaultScanner {
 
     let entries: Dirent[];
     try {
-      entries = await this.semaphore.use(() => fs.readdir(absolutePath, { withFileTypes: true }));
+      entries = await this.semaphore.use(() => readdir(absolutePath, { withFileTypes: true }));
     } catch (error) {
       this.errors.push({ relativePath: relativePath || ".", message: errorMessage(error) });
       return { name, relativePath, absolutePath, kind: "folder", size: 0, fileCount: 0, folderCount: 0, children: [] };
@@ -1968,12 +1974,12 @@ class VaultScanner {
           this.checkCancelled();
           const childRelative = relativePath ? `${relativePath}/${entry.name}` : entry.name;
           if (this.shouldSkip(entry.name, childRelative)) return null;
-          const childAbsolute = path.join(absolutePath, entry.name);
+          const childAbsolute = join(absolutePath, entry.name);
 
           if (entry.isSymbolicLink()) {
             if (!this.settings.followSymbolicLinks) return null;
             try {
-              const linkedStat = await this.semaphore.use(() => fs.stat(childAbsolute));
+              const linkedStat = await this.semaphore.use(() => fsStat(childAbsolute));
               if (linkedStat.isDirectory()) return this.scanDirectory(childAbsolute, childRelative, entry.name);
               if (linkedStat.isFile()) return this.scanFile(childAbsolute, childRelative, entry.name);
               return null;
@@ -2005,7 +2011,7 @@ class VaultScanner {
   private async scanFile(absolutePath: string, relativePath: string, name: string): Promise<StorageNode | null> {
     this.checkCancelled();
     try {
-      const stat = await this.semaphore.use(() => fs.stat(absolutePath));
+      const stat = await this.semaphore.use(() => fsStat(absolutePath));
       if (!stat.isFile()) return null;
       const extension = fileExtension(name);
       this.progress.filesScanned += 1;
@@ -2183,7 +2189,7 @@ export default class VaultStorageMapPlugin extends Plugin {
   getCachePath(): string | null {
     const base = this.getVaultBasePath();
     if (!base) return null;
-    return path.join(base, this.app.vault.configDir, "plugins", this.manifest.id, "storage-cache-v1.json");
+    return join(base, this.app.vault.configDir, "plugins", this.manifest.id, "storage-cache-v1.json");
   }
 
   async loadCachedResult(): Promise<void> {
@@ -2191,7 +2197,7 @@ export default class VaultStorageMapPlugin extends Plugin {
     const basePath = this.getVaultBasePath();
     if (!cachePath || !basePath) return;
     try {
-      const raw = await fs.readFile(cachePath, "utf8");
+      const raw = await readFile(cachePath, "utf8");
       const cached = JSON.parse(raw) as CachedScanResult;
       if (cached.cacheVersion !== CACHE_VERSION || !cached.root) return;
       this.scanResult = {
@@ -2223,8 +2229,8 @@ export default class VaultStorageMapPlugin extends Plugin {
       errors: result.errors,
     };
     try {
-      await fs.mkdir(path.dirname(cachePath), { recursive: true });
-      await fs.writeFile(cachePath, JSON.stringify(cached), "utf8");
+      await mkdir(dirname(cachePath), { recursive: true });
+      await writeFile(cachePath, JSON.stringify(cached), "utf8");
     } catch (error) {
       console.warn("Vault Storage Map cache save failed", error);
     }
@@ -2234,7 +2240,7 @@ export default class VaultStorageMapPlugin extends Plugin {
     const cachePath = this.getCachePath();
     if (!cachePath) return;
     try {
-      await fs.rm(cachePath, { force: true });
+      await rm(cachePath, { force: true });
     } catch (error) {
       console.warn("Vault Storage Map cache clear failed", error);
     }
@@ -2868,7 +2874,7 @@ class StorageMapView extends ItemView {
 
   private openNode(node: StorageNode): void {
     if (node.kind === "folder") {
-      electronShell.showItemInFolder(path.join(node.absolutePath, "."));
+      electronShell.showItemInFolder(join(node.absolutePath, "."));
       return;
     }
     const file = this.app.vault.getFileByPath(node.relativePath);
@@ -3080,7 +3086,7 @@ function parentNode(root: StorageNode, relativePath: string): StorageNode | null
 }
 
 function fileExtension(fileName: string): string {
-  const extension = path.extname(fileName).toLowerCase().replace(/^\./, "");
+  const extension = extname(fileName).toLowerCase().replace(/^\./, "");
   return extension || "(no extension)";
 }
 
@@ -3214,7 +3220,7 @@ function buildRecommendations(result: ScanResult, plugin: VaultStorageMapPlugin)
       title: plugin.t("copilotTitle", { size: formatBytes(total) }),
       description: plugin.t("copilotDesc"),
       path: copilotIndexes[0].absolutePath,
-      copyText: "(^|/)\\.obsidian/copilot-index-.*\\.json$",
+      copyText: `${plugin.app.vault.configDir}/copilot-index-*.json`,
     });
   }
 
@@ -3273,21 +3279,30 @@ function countNodes(root: StorageNode): number {
 }
 
 function dehydrateNode(node: StorageNode): CachedStorageNode {
-  const { absolutePath: _absolutePath, children, ...rest } = node;
-  return { ...rest, children: children?.map(dehydrateNode) };
+  return {
+    name: node.name,
+    relativePath: node.relativePath,
+    kind: node.kind,
+    size: node.size,
+    fileCount: node.fileCount,
+    folderCount: node.folderCount,
+    modifiedAt: node.modifiedAt,
+    extension: node.extension,
+    children: node.children?.map(dehydrateNode),
+  };
 }
 
 function hydrateNode(node: CachedStorageNode, rootPath: string): StorageNode {
   return {
     ...node,
-    absolutePath: node.relativePath ? path.join(rootPath, ...node.relativePath.split("/")) : rootPath,
+    absolutePath: node.relativePath ? join(rootPath, ...node.relativePath.split("/")) : rootPath,
     children: node.children?.map((child) => hydrateNode(child, rootPath)),
   };
 }
 
 function uniqueVaultPath(app: App, initialPath: string): string {
   if (!app.vault.getAbstractFileByPath(initialPath)) return initialPath;
-  const extension = path.extname(initialPath);
+  const extension = extname(initialPath);
   const base = initialPath.slice(0, -extension.length);
   let index = 2;
   while (app.vault.getAbstractFileByPath(`${base} ${index}${extension}`)) index += 1;

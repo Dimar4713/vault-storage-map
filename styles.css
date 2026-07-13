@@ -241,8 +241,8 @@
 .vsm-scan-meta { color: var(--vsm-muted); }
 .vsm-card-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-smaller); }
 .vsm-card-delta { margin-top: 3px; font-size: var(--font-ui-smaller); font-weight: 600; }
-.is-growth { color: var(--vsm-danger) !important; }
-.is-shrink { color: var(--vsm-success) !important; }
+.vsm-view .is-growth { color: var(--vsm-danger); }
+.vsm-view .is-shrink { color: var(--vsm-success); }
 
 .vsm-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .vsm-section { margin-bottom: 14px; padding: 15px; border: 1px solid var(--vsm-border); border-radius: 15px; background: var(--vsm-surface); }
@@ -339,16 +339,16 @@
   visibility: visible;
   transform: translate(var(--vsm-popover-shift-x), 0);
 }
-.vsm-sr-only {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
+.vsm-view .vsm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .vsm-breadcrumb { min-width: 0; overflow-x: auto; }
 .vsm-breadcrumb-button,
