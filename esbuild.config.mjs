@@ -1,14 +1,16 @@
 import esbuild from "esbuild";
-import process from "process";
-import builtins from "builtin-modules";
+import process from "node:process";
+import { builtinModules } from "node:module";
 
-const banner = `/* Vault Storage Map v1.0.0 | MIT */`;
+const banner = `/* Vault Storage Map v1.0.2 | MIT */`;
 const prod = process.argv[2] === "production";
+const nodeBuiltins = [...new Set(builtinModules.flatMap((name) => [name, `node:${name}`]))];
+
 const context = await esbuild.context({
   banner: { js: banner },
   entryPoints: ["src/main.ts"],
   bundle: true,
-  external: ["obsidian", "electron", "node:fs", "node:fs/promises", "node:path", ...builtins],
+  external: ["obsidian", "electron", ...nodeBuiltins],
   format: "cjs",
   target: "es2022",
   logLevel: "info",
