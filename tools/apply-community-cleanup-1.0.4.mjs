@@ -12,7 +12,7 @@ let source = read("src/main.ts");
 source = required(
   source,
   'import { shell as electronShell } from "electron";\nimport type { Dirent } from "node:fs";\nimport * as fs from "node:fs/promises";\nimport * as path from "node:path";',
-  'import { shell as rawElectronShell } from "electron";\nimport type { Dirent } from "node:fs";\nimport { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";\nimport { basename, dirname, extname, join } from "node:path";',
+  'import { shell as rawElectronShell } from "electron";\nimport type { Dirent } from "node:fs";\nimport { mkdir, readFile, readdir, realpath, rm, stat as fsStat, writeFile } from "node:fs/promises";\nimport { basename, dirname, extname, join } from "node:path";',
   "typed Node imports",
 );
 
@@ -26,7 +26,7 @@ source = required(
 const replacements = [
   ["fs.realpath", "realpath"],
   ["fs.readdir", "readdir"],
-  ["fs.stat", "stat"],
+  ["fs.stat", "fsStat"],
   ["fs.readFile", "readFile"],
   ["fs.mkdir", "mkdir"],
   ["fs.writeFile", "writeFile"],
