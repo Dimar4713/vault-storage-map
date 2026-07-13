@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+.vscode/
+.idea/
+storage-cache-v1.json
+data.json
+release/
+main.js
