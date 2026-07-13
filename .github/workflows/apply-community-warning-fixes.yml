@@ -6,6 +6,7 @@ on:
     paths:
       - "tools/apply-community-warning-fixes.mjs"
       - ".github/workflows/apply-community-warning-fixes.yml"
+      - "esbuild.config.mjs"
 
 permissions:
   contents: write
