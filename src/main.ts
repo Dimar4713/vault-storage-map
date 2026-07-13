@@ -9,7 +9,7 @@ import {
   WorkspaceLeaf,
   setIcon,
 } from "obsidian";
-import { shell as rawElectronShell } from "electron";
+import { shell as electronShell } from "electron";
 import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, realpath, rm, stat as fsStat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
@@ -17,12 +17,6 @@ import { basename, dirname, extname, join } from "node:path";
 const VIEW_TYPE_STORAGE_MAP = "vault-storage-map-view";
 const CACHE_VERSION = 1;
 const MAX_CACHED_NODES = 50_000;
-
-interface ElectronShell {
-  showItemInFolder(fullPath: string): void;
-}
-
-const electronShell = rawElectronShell as unknown as ElectronShell;
 
 type NodeKind = "folder" | "file";
 type ViewTab = "summary" | "treemap" | "folders" | "files" | "types" | "recommendations";

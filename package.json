@@ -1,6 +1,6 @@
 {
   "name": "vault-storage-map",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Multilingual visual disk-usage analyzer for local vaults.",
   "main": "main.js",
   "scripts": {
