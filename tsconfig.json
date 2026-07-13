@@ -1,9 +1,14 @@
-﻿{
+{
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "*": [
+        "node_modules/*"
+      ]
+    },
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler",
     "target": "ES2022",
     "allowJs": false,
     "noImplicitAny": true,
@@ -13,7 +18,9 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noUnusedLocals": false,
+    "moduleResolution": "node",
     "importHelpers": true,
+    "downlevelIteration": true,
     "esModuleInterop": true,
     "lib": [
       "DOM",
